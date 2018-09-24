@@ -1,0 +1,306 @@
+# HERE WE HAVE A FIRST MALTHUSIAN ECONOMY FUNCTION 
+# (NOTE THAT IF YOU START RUNNING IT IN 8000 BC, IT WILL
+# WILL TAKE A LONG TIME TO RUN)
+#
+# FUNCTION FOR CALCULATING AND GRAPHING THE LEVELS OF 
+# SOLOW GROWTH MODEL VARIABLES IN MALTHUSIAN SIMULATIONS
+#
+# might as well put "check that common libraries are active"
+# as a default header in every long python code cell...
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import pandas as pd
+import scipy as sp
+import numpy as np
+%matplotlib inline
+
+# we are going to want to see what happens for lots of
+# different model parameter values and base conditions,
+# so stuff our small simulation program inside a function, so 
+# we can then invoke it with a single line...
+#
+# we are going to assume the economy starts on its base
+# balanced growth path...
+#
+# we are going to want to keep track not just of what the
+# economy's variables are at each point in time, but also 
+# what the base and alternative balanced-growth path 
+# values of variables are. Given the parameters, the new BGP 
+# is attracting the economy to it at the speed (1-α)(n+g+δ), 
+# closing that fraction of the gap between its current state 
+# and the balanced growth path attractor every period...
+# 
+# The function requires four inputs. In order:
+# 
+# * L0: the initial level of the labor force
+# * E0: the initial level of the efficiency-of-labor
+# * initial_year: the initial calendar year of the civilization corresponding to t=0
+# * T: the number of years for which the simulation will run.
+# 
+# Plus it can have:
+# 
+# * n: labor-force growth rate (default value: 0)
+# * g: efficiency-of-labor growth rate (default value: 0)
+# * s: savings-investment rate (default value: 0.15) 
+# * alpha: orientation-of-growth-toward-capital parameter $ \alpha $ (default value: 0.5)
+# * delta: deprecation rate on capital parameter $ \delta $ (default value: 0.05)
+# * Delta_s=0, Delta_g=0, Delta_n=0: differentials for alternative scenarios (default values: 0)
+# * graphs: graphs plotted (default value: "LEVELS"; alternatives: "LOGS", "NONE")
+# * remind: remind us of parameter values for the baseline and alternative scenarios (YES/NO)
+
+def sgm_malthus_10000yr_run(L0, E0, initial_year, T , n=0.000, g=0.00, s=0.15, 
+    alpha=0.5, delta=0.05, Delta_s=0, Delta_g=0, Delta_n=0, graphs="LEVELS", remind = "YES"):
+
+    sg_df = pd.DataFrame(index=range(T),columns=['Year',
+        'Labor', 
+        'Efficiency',
+        'Capital',
+        'Output',
+        'Output_per_Worker',
+        'Capital_Output_Ratio',
+        'Population',
+        'BGP_base_Labor',
+        'BGP_base_Efficiency',
+        'BGP_base_Output',
+        'BGP_base_Output_per_Worker',
+        'BGP_base_Capital_Output_Ratio',
+        'BGP_base_Capital',
+        'BGP_base_Population',
+        'BGP_alt_Labor',
+        'BGP_alt_Efficiency',
+        'BGP_alt_Output',
+        'BGP_alt_Output_per_Worker',
+        'BGP_alt_Capital_Output_Ratio',
+        'BGP_alt_Capital',
+        'BGP_alt_Population'],
+        dtype='float')
+
+    sg_df.Year[0] = initial_year
+    sg_df.Labor[0] = L0
+    sg_df.Population[0] = 2 * L0
+    sg_df.BGP_base_Labor[0] = L0
+    sg_df.BGP_base_Population[0] = 2 * sg_df.BGP_base_Labor[0]
+    sg_df.BGP_alt_Labor[0] = L0
+    sg_df.Efficiency[0] = E0
+    sg_df.BGP_base_Efficiency[0] = E0
+    sg_df.BGP_alt_Efficiency[0] = E0
+    sg_df.BGP_alt_Population[0] = 2 * sg_df.BGP_alt_Labor[0]
+
+    KoverY_base_steady_state = s/(n+g+delta)
+    YoverL_base_steady_state = ((s/(n+g+delta))**(alpha/(1-alpha)) 
+        * E0)
+    KoverL_base_steady_state = (YoverL_base_steady_state *
+        KoverY_base_steady_state)
+    
+    sg_df.Capital[0] = KoverL_base_steady_state * L0
+    sg_df.Output[0] = (sg_df.Capital[0]**alpha * (sg_df.Labor[0] * 
+        sg_df.Efficiency[0])**(1-alpha))
+    sg_df.Output_per_Worker[0] = sg_df.Output[0]/sg_df.Labor[0]
+    sg_df.Capital_Output_Ratio[0] = sg_df.Capital[0]/sg_df.Output[0]
+    
+    sg_df.BGP_base_Capital_Output_Ratio[0] = (s / (n + g + delta))
+    sg_df.BGP_base_Output_per_Worker[0] = sg_df.Efficiency[0] * (
+        sg_df.BGP_base_Capital_Output_Ratio[0]*(alpha/(1 - alpha)))
+    sg_df.BGP_base_Output[0] = sg_df.BGP_base_Output_per_Worker[0] * sg_df.Labor[0]
+    sg_df.BGP_base_Capital[0] = sg_df.BGP_base_Output[0] * (
+        sg_df.BGP_base_Capital_Output_Ratio[0])
+    
+    sg_df.BGP_alt_Capital_Output_Ratio[0] = ((s + Delta_s) / 
+        (n + Delta_n + g + Delta_g + delta))
+    sg_df.BGP_alt_Output_per_Worker[0] = sg_df.Efficiency[0] * (
+        sg_df.BGP_alt_Capital_Output_Ratio[0]*(alpha/(1 - alpha)))
+    sg_df.BGP_alt_Output[0] = sg_df.BGP_alt_Output_per_Worker[0] * sg_df.Labor[0]
+    sg_df.BGP_alt_Capital[0] = sg_df.BGP_alt_Output[0] * (
+        sg_df.BGP_alt_Capital_Output_Ratio[0])
+    
+    for i in range(T):
+        sg_df.Year[i+1] = sg_df.Year[i]+1
+        sg_df.Labor[i+1] = (sg_df.Labor[i] * np.exp(n + Delta_n))
+        sg_df.Population[i+1] = 2 * sg_df.Labor[i+1]
+        sg_df.Efficiency[i+1] = (sg_df.Efficiency[i] * np.exp(g + Delta_g))
+        KoverY_current = sg_df.Capital[i]/sg_df.Output[i]
+        sg_df.Capital[i+1] = (sg_df.Capital[i] * np.exp((s+Delta_s)/ 
+            KoverY_current - delta))
+        sg_df.Output[i+1] = (sg_df.Capital[i+1]**alpha * 
+            (sg_df.Labor[i+1] * sg_df.Efficiency[i+1])**(1-alpha))
+        sg_df.Output_per_Worker[i+1] = sg_df.Output[i+1]/sg_df.Labor[i+1]
+        sg_df.Capital_Output_Ratio[i+1] = (sg_df.Capital[i+1]/
+            sg_df.Output[i+1])
+
+    for i in range(T):
+        sg_df.BGP_base_Labor[i+1] = (sg_df.BGP_base_Labor[i] * np.exp(n))
+        sg_df.BGP_base_Population[i+1] = 2 * sg_df.BGP_base_Labor[i+1]
+        sg_df.BGP_base_Efficiency[i+1] = (sg_df.BGP_base_Efficiency[i] * np.exp(g))
+        sg_df.BGP_base_Capital_Output_Ratio[i+1] = (s / (n + g + delta))
+        sg_df.BGP_base_Output_per_Worker[i+1] = sg_df.BGP_base_Efficiency[i+1] * (
+            sg_df.BGP_base_Capital_Output_Ratio[i+1]**(alpha/(1 - alpha)))
+        sg_df.BGP_base_Output[i+1] = (sg_df.BGP_base_Output_per_Worker[i+1] * 
+            sg_df.BGP_base_Labor[i+1])
+        sg_df.BGP_base_Capital[i+1] = (s / (n + g + delta))**(1/(1-alpha)) * (
+            sg_df.Efficiency[i+1] * sg_df.Labor[i+1])
+
+    for i in range(T):
+        sg_df.BGP_alt_Labor[i+1] = (sg_df.BGP_alt_Labor[i] * np.exp(n + Delta_n))
+        sg_df.BGP_alt_Population[i+1] = 2 * sg_df.BGP_alt_Labor[i+1]
+        sg_df.BGP_alt_Efficiency[i+1] = (sg_df.BGP_alt_Efficiency[i] * np.exp(g+Delta_g))
+        sg_df.BGP_alt_Capital_Output_Ratio[i+1] = ((s+ Delta_s) / 
+            (n + Delta_n + g + Delta_g + delta))
+        sg_df.BGP_alt_Output_per_Worker[i+1] = sg_df.BGP_alt_Efficiency[i+1] * (
+            sg_df.BGP_alt_Capital_Output_Ratio[i+1]**(alpha/(1 - alpha)))
+        sg_df.BGP_alt_Output[i+1] = (sg_df.BGP_alt_Output_per_Worker[i+1] * 
+            sg_df.BGP_alt_Labor[i+1])
+        sg_df.BGP_alt_Capital[i+1] = ((s + Delta_s) / (n + Delta_n + g + Delta_g + delta))**(1/(1-alpha)) * (
+            sg_df.BGP_alt_Efficiency[i+1] * sg_df.BGP_alt_Labor[i+1])  
+
+    sg_df.Population = 2 * sg_df.Labor
+    
+    sg_df = sg_df.set_index("Year")
+        
+    if (graphs == "LEVELS"): # prepare and plot level graphs
+        fig = plt.figure(figsize=(12, 12))
+
+        ax1 = plt.subplot(2,3,1)
+        sg_df.BGP_base_Labor.plot(ax = ax1, title = "BGP (base) Labor")
+        sg_df.BGP_alt_Labor.plot(ax = ax1, title = "BGP (alt) Labor")
+        sg_df.Labor.plot(ax = ax1, title = "Labor Force")
+        plt.ylabel("Values")
+        plt.ylim(0, )
+
+        ax2 = plt.subplot(2,3,2)
+        sg_df.BGP_base_Efficiency.plot(ax = ax2, title = "BGP (base) Efficiency")
+        sg_df.BGP_alt_Efficiency.plot(ax = ax2, title = "BGP (alt) Efficiency")
+        sg_df.Efficiency.plot(ax = ax2, title = "Efficiency of Labor")
+        plt.ylim(0, )
+    
+        ax3 = plt.subplot(2,3,3)
+        sg_df.BGP_base_Capital.plot(ax = ax3, title = "BGP (base) Capital Stock")
+        sg_df.BGP_alt_Capital.plot(ax = ax3, title = "BGP (alt) Capital Stock")
+        sg_df.Capital.plot(ax = ax3, title = "Capital Stock")
+        plt.ylim(0, )
+
+        ax4 = plt.subplot(2,3,4)
+        sg_df.BGP_base_Output.plot(ax = ax4, title = "BGP (base) Output")
+        sg_df.BGP_alt_Output.plot(ax = ax4, title = "BGP (alt) Output")
+        sg_df.Output.plot(ax = ax4, title = "Output")
+        plt.ylabel("Values")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        ax5 = plt.subplot(2,3,5)
+        sg_df.BGP_base_Output_per_Worker.plot(ax = ax5, title = "BGP (base) Output per Worker")
+        sg_df.BGP_alt_Output_per_Worker.plot(ax = ax5, title = "BGP (alt) Output per Worker")
+        sg_df.Output_per_Worker.plot(ax = ax5, title = "Output per Worker")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        ax6 = plt.subplot(2,3,6)
+        sg_df.BGP_base_Capital_Output_Ratio.plot(ax = ax6, 
+            title = "BGP (base) Capital-Output Ratio")
+        sg_df.BGP_alt_Capital_Output_Ratio.plot(ax = ax6, 
+            title = "BGP (alt) Capital-Output Ratio")
+        sg_df.Capital_Output_Ratio.plot(ax = ax6, 
+            title = "Capital-Output Ratio")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        plt.suptitle('Solow Growth Model: Levels: Simulation Run', size = 20)
+
+        plt.show()
+        
+    if (graphs == "LOGS"):  # prepare and plot log graphs
+        fig = plt.figure(figsize=(12, 12))
+
+        ax1 = plt.subplot(2,3,1)
+        np.log(sg_df.BGP_base_Labor).plot(ax = ax1, title = "BGP (base) Labor")
+        np.log(sg_df.BGP_alt_Labor).plot(ax = ax1, title = "BGP (alt) Labor")
+        np.log(sg_df.Labor).plot(ax = ax1, title = "Log Labor Force")
+        plt.ylabel("Values")
+        plt.ylim(0, )
+
+        ax2 = plt.subplot(2,3,2)
+        np.log(sg_df.BGP_base_Efficiency).plot(ax = ax2, title = "BGP (base) Efficiency")
+        np.log(sg_df.BGP_alt_Efficiency).plot(ax = ax2, title = "BGP (alt) Efficiency")
+        np.log(sg_df.Efficiency).plot(ax = ax2, title = "Log Efficiency of Labor")
+        plt.ylim(0, )
+    
+        ax3 = plt.subplot(2,3,3)
+        np.log(sg_df.BGP_base_Capital).plot(ax = ax3, title = "BGP (base) Capital Stock")
+        np.log(sg_df.BGP_alt_Capital).plot(ax = ax3, title = "BGP (alt) Capital Stock")
+        np.log(sg_df.Capital).plot(ax = ax3, title = "Log Capital Stock")
+        plt.ylim(0, )
+
+        ax4 = plt.subplot(2,3,4)
+        np.log(sg_df.BGP_base_Output).plot(ax = ax4, title = "BGP (base) Output")
+        np.log(sg_df.BGP_alt_Output).plot(ax = ax4, title = "BGP (alt) Output")
+        np.log(sg_df.Output).plot(ax = ax4, title = "Log Output")
+        plt.ylabel("Values")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        ax5 = plt.subplot(2,3,5)
+        np.log(sg_df.BGP_base_Output_per_Worker).plot(ax = ax5, title = "BGP (base) Output per Worker")
+        np.log(sg_df.BGP_alt_Output_per_Worker).plot(ax = ax5, title = "BGP (alt) Output per Worker")
+        np.log(sg_df.Output_per_Worker).plot(ax = ax5, title = "Log Output per Worker")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        ax6 = plt.subplot(2,3,6)
+        sg_df.BGP_base_Capital_Output_Ratio.plot(ax = ax6, 
+            title = "BGP (base) Capital-Output Ratio")
+        sg_df.BGP_alt_Capital_Output_Ratio.plot(ax = ax6, 
+            title = "BGP (alt) Capital-Output Ratio")
+        sg_df.Capital_Output_Ratio.plot(ax = ax6, 
+            title = "Capital-Output Ratio")
+        plt.xlabel("Year")
+        plt.ylim(0, )
+
+        plt.suptitle('Solow Growth Model: Logs: Simulation Run', size = 20)
+
+        plt.show()
+    
+    if ((graphs != "LEVELS") and (graphs != "LOGS")):  # plot no graphs
+        fig = "NONE"
+        
+    if (remind == "YES"): # print parameter values to jog the memory, if reminder requested
+        print("The blue line is the initial balanced-growth path;")
+        print("the orange line is the alternative balanced growth path;")
+        print("the green line is the track of the economy as it transitions")
+        print("from the baseline to the alternative BGP.")
+        print(" ")
+    
+        print(n, "is the baseline labor-force growth rate")
+        print(g, "is the baseline efficiency-of-labor growth rate")
+        print(s, "is the baseline savings rate")
+        print(" ")
+          
+        print(n + Delta_n, "is the alternative labor-force growth rate")
+        print(g + Delta_g, "is the alternative efficiency-of-labor growth rate")
+        print(s + Delta_s, "is the alternative savings-investment rate")
+        print(" ")
+    
+        print(delta, "is the depreciation rate")
+        print(alpha, "is the orientation-of-growth-toward-capital parameter")
+    
+    parameters_dict = {} #stuff the parameters into a dictionary
+    parameters_dict["L0"] = L0
+    parameters_dict["E0"] = E0
+    parameters_dict["initial_year"] = initial_year
+    parameters_dict["T"] = T
+    parameters_dict["n"] = n
+    parameters_dict["g"] = g
+    parameters_dict["s"] = s
+    parameters_dict["alpha"] = alpha
+    parameters_dict["delta"] = delta
+    parameters_dict["Delta_s"] = Delta_s
+    parameters_dict["Delta_g"] = Delta_g
+    parameters_dict["Delta_n"] = Delta_n
+    parameters_dict["graphs"] = graphs
+    parameters_dict["remind"] = remind
+    
+    SGM_dict = {} # stuff the parameters, the figures, and the simulation dataframe in a dictionary
+    SGM_dict["df"] = sg_df
+    SGM_dict["plots"] = fig
+    SGM_dict["parameters"] = parameters_dict
+    
+    return SGM_dict # return the dictionary for subsequent user analysis
